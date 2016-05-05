@@ -1,13 +1,14 @@
 use warnings;
 use strict;
 use DBI;
-use File::Slurp;
+#use File::Slurp;
+use File::Temp qw/ tempfile /;
+#use XML::Twig;
 
-my @clobTypes = 
-( 
+my @clobTypes =  ( 
     { 
         type => 'xview',
-        dir => 'XviewDefinitions\\',
+        dir => 'XviewDefinitions\\CREATE',
         stmt => 'SELECT x.file_name, x.xview_metadata.getClobVal() FROM xviewmgr.xview_definition_metadata x',
     },
     { 
@@ -27,48 +28,75 @@ my @clobTypes =
     },
     { 
         type => 'mapsets',
-        dir => 'Mapsets\\Environmental\\',
+        dir => 'Mapsets',
         stmt => "SELECT x.domain || '.xml', x.metadata.getClobVal() FROM envmgr.env_mapsets_metadata x",
     },
 );
  
-die "Usage: clobcheck.pl code_source_folder host sid xviewmgr_password\n" unless @ARGV == 4;
-my ( $code_source_folder, $host, $sid, $passwd ) = @ARGV;
+die "Usage: clobcheck.pl code_source_folder host sid username password\n" unless @ARGV == 5;
+my ( $code_source_folder, $host, $sid, $username, $passwd ) = @ARGV;
 
 die "Invalid folder $code_source_folder" if not -d $code_source_folder;
 
-my $dbh = DBI->connect( "dbi:Oracle:host=$host;sid=$sid", "xviewmgr", $passwd ) or die $DBI::errstr;
+my $dbh = DBI->connect( "dbi:Oracle:host=$host;sid=$sid", $username, $passwd ) or die $DBI::errstr;
 # Expand the read length to a safe size
 $dbh->{LongReadLen} = 512 * 1024;
 
-for ( @clobTypes )
-{
+for ( @clobTypes ) {
     print "\nComparing " . $$_{'type'} . "\n";
     my $sth = $dbh->prepare( $$_{'stmt'} ) or die $DBI::errstr;
     $sth->execute or die $DBI::errstr;
 
     my ( $clob_name, $clob_data );
     $sth->bind_columns( \$clob_name, \$clob_data );
+    
     while ( $sth->fetch ) {
-        my $filename = $code_source_folder.$$_{'dir'}.$clob_name;
-        
+        my $filename = $code_source_folder.'\\'.$$_{'dir'}.'\\'.$clob_name;
+        my $temp_clob = $clob_data;
         if ( not -e $filename ) {
-            print "Could not find definition file $filename\n";
+            print "Definition file not found: $filename\n";
             next;
         }
 
-        my $file_contents = read_file( $filename );
+        # Slurp file contents
+        #my $file_contents = read_file( $filename );
+        
+        # No Slurp
+        my $file_contents;
+        {
+           open FH,"<$filename";
+           local $/ = undef;
+           $file_contents = <FH>;
+        }
+        
         # Strip whitespace and comments from both files
+        # So it doesn't affect diffing
         $file_contents =~ s/\s//g;
-        $clob_data =~ s/\s//g;
+        $temp_clob =~ s/\s//g;
         
         $file_contents =~ s/<!--.*-->//g;
-        $clob_data =~ s/<!--.*-->//g;
+        $temp_clob =~ s/<!--.*-->//g;
         
         $file_contents =~ s/<\?.*\?>//g;
-        $clob_data =~ s/<\?.*\?>//g;
+        $temp_clob =~ s/<\?.*\?>//g;
         
-        print "Definition mismatch for $clob_name\n" if $clob_data ne $file_contents;
+        print "Definition mismatch: $clob_name\n" if $temp_clob ne $file_contents;
+        
+        # TortoiseMerge Diff
+        # if ( $temp_clob ne $file_contents )
+        # {
+            # my ( $tfh, $tempfile ) = tempfile();
+            # print $tfh $clob_data;
+            # close $tfh;
+            # system( "tortoisemerge /mine:$tempfile /theirs:$filename")
+        # }
+        
+        # Overwrite xviews
+        # if ( $$_{'type'} eq 'xview' and $temp_clob ne $file_contents )
+        # {
+            # open FH,">$filename";
+            # print FH $clob_data;
+        # }
     }
 }
 
