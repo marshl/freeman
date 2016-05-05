@@ -33,12 +33,12 @@ my @clobTypes =  (
     },
 );
  
-die "Usage: clobcheck.pl code_source_folder host sid username password\n" unless @ARGV == 5;
-my ( $code_source_folder, $host, $sid, $username, $passwd ) = @ARGV;
+die "Usage: clobcheck.pl code_source_folder host port sid username password\n" unless @ARGV == 6;
+my ( $code_source_folder, $host, $port, $sid, $username, $password ) = @ARGV;
 
 die "Invalid folder $code_source_folder" if not -d $code_source_folder;
 
-my $dbh = DBI->connect( "dbi:Oracle:host=$host;sid=$sid", $username, $passwd ) or die $DBI::errstr;
+my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password ) or die $DBI::errstr;
 # Expand the read length to a safe size
 $dbh->{LongReadLen} = 512 * 1024;
 
