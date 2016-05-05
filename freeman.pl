@@ -58,15 +58,12 @@ for ( @clobTypes ) {
             next;
         }
 
-        # Slurp file contents
-        #my $file_contents = read_file( $filename );
-        
-        # No Slurp
+        # Read file contents (without slurp)
         my $file_contents;
         {
-           open FH,"<$filename";
-           local $/ = undef;
-           $file_contents = <FH>;
+            open ( my $fh, '<', $filename ) or die $!;
+            local $/ = undef;
+            $file_contents = <$fh>;
         }
         
         # Strip whitespace and comments from both files
