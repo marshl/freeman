@@ -111,14 +111,19 @@ $dbh->{LongReadLen} = 512 * 1024;
 foreach my $clobType ( @clobTypes ) {
     print "\nComparing " . $clobType->{'name'} . "\n";
     
-    my $fullpath = $code_source_folder . '\\' . $clobType->{'dir'};
-    # opendir(D, $fullpath ) or die "Can't open directory $fullpath: $!";
+    my $directoryPath = $code_source_folder . '\\' . $clobType->{'dir'};
+    
+    if ( not -d $directoryPath ) {
+        print "Directory not found: $directoryPath\n";
+        next;
+    }
+    #    opendir(D, $fullpath ) or die "Can't open directory $fullpath: $!";
     
     # my @fileList = grep !/^\.\.?$/, readdir(D);
     
     my $statement = $dbh->prepare( $clobType->{'stmt'} ) or die $DBI::errstr;
     print Dumper($clobType);
-    my @fileList = File::Find::Rule->file->name( $clobType->{'extension'} )->in($fullpath);
+    my @fileList = File::Find::Rule->file->name( $clobType->{'extension'} )->in($directoryPath);
     #print Dumper(@fileList);
     
     foreach my $fullpath ( @fileList ) {
