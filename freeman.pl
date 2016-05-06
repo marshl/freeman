@@ -97,6 +97,17 @@ SELECT dlt.xml_data.getClobVal()
 FROM doclibmgr.document_library_types dlt
 WHERE dlt.document_library_type = ?",
     },
+    
+    { 
+        name => 'Document Templates',
+        dir => 'DocumentTemplates',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT dt.xml_data.getClobVal()
+FROM decmgr.document_templates dt
+WHERE dt.name = ?",
+    },
 );
  
 die "Usage: clobcheck.pl code_source_folder host port sid username password\n" unless @ARGV == 6;
