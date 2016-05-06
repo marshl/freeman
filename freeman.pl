@@ -137,13 +137,8 @@ foreach my $clobType ( @clobTypes ) {
             $local_file_content = <$fh>;
         }
         
-        #if ( defined $$clobType{'remove_patterns'} ) {
-        #print Dumper($clobType{'remove_patterns'});
         my $patterns = $clobType->{'remove_patterns'};
-        #print Dumper(@patterns);
         foreach my $pattern ( @$patterns ) {
-            #print '\t' . Dumper($pattern);
-            #print "$pattern\n";
             $local_file_content =~ s/($pattern)//g;
             $filedata =~ s/($pattern)//g;
         }
