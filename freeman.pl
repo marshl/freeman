@@ -108,6 +108,17 @@ SELECT dt.xml_data.getClobVal()
 FROM decmgr.document_templates dt
 WHERE dt.name = ?",
     },
+    
+    { 
+        name => 'File Folder Types',
+        dir => 'FileFolderTypes',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT fft.xml_data.getClobVal()
+FROM decmgr.file_folder_types fft
+WHERE fft.file_folder_type = ?",
+    },
 );
  
 die "Usage: clobcheck.pl code_source_folder host port sid username password\n" unless @ARGV == 6;
