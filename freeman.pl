@@ -1,35 +1,90 @@
+###############################################################################
+#
+# Fox REconciliation Execution MANager
+# 
+# "The right man in the wrong place can make all the difference in the world."
+#
+####
+
 use warnings;
 use strict;
 use DBI;
-#use File::Slurp;
 use File::Temp qw/ tempfile /;
-#use XML::Twig;
+use Data::Dumper;
+use File::Find::Rule;
+use File::Basename;
 
-my @clobTypes =  ( 
+my @clobTypes =  (
     { 
-        type => 'xview',
-        dir => 'XviewDefinitions\\CREATE',
-        stmt => 'SELECT x.file_name, x.xview_metadata.getClobVal() FROM xviewmgr.xview_definition_metadata x',
+        name => 'Fox5Modules - JavaScript',
+        dir => 'Fox5Modules',
+        extension => '*.js',
+        remove_patterns => [ '\s', '\/\*.+?\*\/' ],
+        stmt => "
+SELECT data
+FROM envmgr.fox_components_fox5 fc5
+WHERE fc5.name = 'js/' || ?",
+    },
+     { 
+        name => 'Fox5Modules - Modules',
+        dir => 'Fox5Modules',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT data
+FROM envmgr.fox_components_fox5 fc5
+WHERE fc5.name = ?",
+    },
+    
+    { 
+        name => 'xview',
+        dir => 'XviewDefinitions',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT x.xview_metadata.getClobVal()
+FROM xviewmgr.xview_definition_metadata x
+WHERE x.file_name = ? || '.xml'",
     },
     { 
-        type => 'xview2',
-        dir => 'XviewDefinitions\\',
-        stmt => 'SELECT x.file_name, x.xview_metadata_formatted FROM xviewmgr.xview2_definition_metadata x',
+        name => 'xview2',
+        dir => 'Xview2Definitions',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT x.xview_metadata_formatted
+FROM xviewmgr.xview2_definition_metadata x
+WHERE x.file_name = ? || '.xml'",
     },
     { 
-        type => 'navbar_groups',
+        name => 'navbar_groups',
         dir => 'NavBarActionGroups\\',
-        stmt => "SELECT x.mnem || '.xml', x.xml_data.getClobVal() FROM envmgr.nav_bar_action_groups x",
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT x.xml_data.getClobVal()
+FROM envmgr.nav_bar_action_groups x
+WHERE x.mnem = ?",
     },
-    { 
-        type => 'navbar_categories',
+    {
+        name => 'navbar_categories',
         dir => 'NavBarActionCategories\\',
-        stmt => "SELECT x.mnem || '.xml', x.xml_data.getClobVal() FROM envmgr.nav_bar_action_categories x",
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT x.xml_data.getClobVal()
+FROM envmgr.nav_bar_action_categories x
+WHERE x.mnem = ?",
     },
     { 
-        type => 'mapsets',
-        dir => 'Mapsets',
-        stmt => "SELECT x.domain || '.xml', x.metadata.getClobVal() FROM envmgr.env_mapsets_metadata x",
+        name => 'mapsets',
+        dir => 'Mapsets\\Environmental',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT x.metadata.getClobVal()
+FROM envmgr.env_mapsets_metadata x
+WHERE x.domain = ?",
     },
 );
  
@@ -42,58 +97,61 @@ my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username,
 # Expand the read length to a safe size
 $dbh->{LongReadLen} = 512 * 1024;
 
-for ( @clobTypes ) {
-    print "\nComparing " . $$_{'type'} . "\n";
-    my $sth = $dbh->prepare( $$_{'stmt'} ) or die $DBI::errstr;
-    $sth->execute or die $DBI::errstr;
-
-    my ( $clob_name, $clob_data );
-    $sth->bind_columns( \$clob_name, \$clob_data );
+foreach my $clobType ( @clobTypes ) {
+    print "\nComparing " . $clobType->{'name'} . "\n";
     
-    while ( $sth->fetch ) {
-        my $filename = $code_source_folder.'\\'.$$_{'dir'}.'\\'.$clob_name;
-        my $temp_clob = $clob_data;
-        if ( not -e $filename ) {
-            print "Definition file not found: $filename\n";
+    my $fullpath = $code_source_folder . '\\' . $clobType->{'dir'};
+    # opendir(D, $fullpath ) or die "Can't open directory $fullpath: $!";
+    
+    # my @fileList = grep !/^\.\.?$/, readdir(D);
+    
+    my $statement = $dbh->prepare( $clobType->{'stmt'} ) or die $DBI::errstr;
+    print Dumper($clobType);
+    my @fileList = File::Find::Rule->file->name( $clobType->{'extension'} )->in($fullpath);
+    #print Dumper(@fileList);
+    
+    foreach my $fullpath ( @fileList ) {
+        my $filename = basename($fullpath);
+        (my $without_extension = $filename) =~ s/\.[^.]+$//;
+        
+        print $without_extension . "\n";
+        
+        $statement->execute($without_extension) or die $statement->errstr();
+        my $filedata = $statement->fetchrow();
+        
+        if ( $statement->rows > 1 ) {
+            print "Too many records found for $filename\n";
             next;
         }
-
-        # Read file contents (without slurp)
-        my $file_contents;
-        {
-            open ( my $fh, '<', $filename ) or die $!;
-            local $/ = undef;
-            $file_contents = <$fh>;
+        
+        #die "No data found." if not defined $data and not defined $bindata;
+        if ( $statement->rows == 0 ) {
+            print "No data found for $filename\n";
+            next;
         }
         
-        # Strip whitespace and comments from both files
-        # So it doesn't affect diffing
-        $file_contents =~ s/\s//g;
-        $temp_clob =~ s/\s//g;
+        my $local_file_content;
+        {
+            open ( my $fh, '<', $fullpath ) or die "Could not open file $fullpath: $!";
+            local $/ = undef;
+            $local_file_content = <$fh>;
+        }
         
-        $file_contents =~ s/<!--.*-->//g;
-        $temp_clob =~ s/<!--.*-->//g;
+        #if ( defined $$clobType{'remove_patterns'} ) {
+        #print Dumper($clobType{'remove_patterns'});
+        my $patterns = $clobType->{'remove_patterns'};
+        #print Dumper(@patterns);
+        foreach my $pattern ( @$patterns ) {
+            #print '\t' . Dumper($pattern);
+            #print "$pattern\n";
+            $local_file_content =~ s/($pattern)//g;
+            $filedata =~ s/($pattern)//g;
+        }
+        #}
         
-        $file_contents =~ s/<\?.*\?>//g;
-        $temp_clob =~ s/<\?.*\?>//g;
-        
-        print "Definition mismatch: $clob_name\n" if $temp_clob ne $file_contents;
-        
-        # TortoiseMerge Diff
-        # if ( $temp_clob ne $file_contents )
-        # {
-            # my ( $tfh, $tempfile ) = tempfile();
-            # print $tfh $clob_data;
-            # close $tfh;
-            # system( "tortoisemerge /mine:$tempfile /theirs:$filename")
-        # }
-        
-        # Overwrite xviews
-        # if ( $$_{'type'} eq 'xview' and $temp_clob ne $file_contents )
-        # {
-            # open FH,">$filename";
-            # print FH $clob_data;
-        # }
+        if ( $local_file_content ne $filedata ) {
+            print "File mismatch $filename\n";
+        }
     }
 }
 
