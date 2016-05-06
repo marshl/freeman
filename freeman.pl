@@ -25,7 +25,8 @@ SELECT data
 FROM envmgr.fox_components_fox5 fc5
 WHERE fc5.name = 'js/' || ?",
     },
-     { 
+    
+    { 
         name => 'Fox5Modules - Modules',
         dir => 'Fox5Modules',
         extension => '*.xml',
@@ -46,8 +47,9 @@ SELECT x.xview_metadata.getClobVal()
 FROM xviewmgr.xview_definition_metadata x
 WHERE x.file_name = ? || '.xml'",
     },
+    
     { 
-        name => 'xview2',
+        name => 'Xview 2s',
         dir => 'Xview2Definitions',
         extension => '*.xml',
         remove_patterns => [ '\s', '<!--.\*-->' ],
@@ -56,8 +58,9 @@ SELECT x.xview_metadata_formatted
 FROM xviewmgr.xview2_definition_metadata x
 WHERE x.file_name = ? || '.xml'",
     },
+    
     { 
-        name => 'navbar_groups',
+        name => 'Xviews',
         dir => 'NavBarActionGroups\\',
         extension => '*.xml',
         remove_patterns => [ '\s', '<!--.\*-->' ],
@@ -66,8 +69,9 @@ SELECT x.xml_data.getClobVal()
 FROM envmgr.nav_bar_action_groups x
 WHERE x.mnem = ?",
     },
+    
     {
-        name => 'navbar_categories',
+        name => 'Navbar Categories',
         dir => 'NavBarActionCategories\\',
         extension => '*.xml',
         remove_patterns => [ '\s', '<!--.\*-->' ],
@@ -76,19 +80,9 @@ SELECT x.xml_data.getClobVal()
 FROM envmgr.nav_bar_action_categories x
 WHERE x.mnem = ?",
     },
-    { 
-        name => 'mapsets',
-        dir => 'Mapsets\\Environmental',
-        extension => '*.xml',
-        remove_patterns => [ '\s', '<!--.\*-->' ],
-        stmt => "
-SELECT x.metadata.getClobVal()
-FROM envmgr.env_mapsets_metadata x
-WHERE x.domain = ?",
-    },
     
     { 
-        name => 'DocLibTypes',
+        name => 'DocLib Types',
         dir => 'DocLibTypes',
         extension => '*.xml',
         remove_patterns => [ '\s', '<!--.\*-->' ],
@@ -118,6 +112,17 @@ WHERE dt.name = ?",
 SELECT fft.xml_data.getClobVal()
 FROM decmgr.file_folder_types fft
 WHERE fft.file_folder_type = ?",
+    },
+    
+    { 
+        name => 'Mapsets',
+        dir => 'Mapsets',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT emm.metadata.getClobVal()
+FROM envmgr.env_mapsets_metadata emm
+WHERE emm.domain = ?",
     },
 );
  
