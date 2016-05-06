@@ -86,6 +86,17 @@ SELECT x.metadata.getClobVal()
 FROM envmgr.env_mapsets_metadata x
 WHERE x.domain = ?",
     },
+    
+    { 
+        name => 'DocLibTypes',
+        dir => 'DocLibTypes',
+        extension => '*.xml',
+        remove_patterns => [ '\s', '<!--.\*-->' ],
+        stmt => "
+SELECT dlt.xml_data.getClobVal()
+FROM doclibmgr.document_library_types dlt
+WHERE dlt.document_library_type = ?",
+    },
 );
  
 die "Usage: clobcheck.pl code_source_folder host port sid username password\n" unless @ARGV == 6;
