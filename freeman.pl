@@ -1,6 +1,6 @@
 ###############################################################################
 #
-# Fox REconciliation Execution MANager
+# Fox REconciliation Enterprise MANager
 # 
 # "The right man in the wrong place can make all the difference in the world."
 #
