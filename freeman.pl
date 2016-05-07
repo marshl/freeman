@@ -104,6 +104,42 @@ sub get_directory_types {
 
     return (
     {
+        name => 'DocLib Types',
+        directory => 'DocLibTypes',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT dlt.xml_data.getClobVal()
+FROM doclibmgr.document_library_types dlt
+WHERE dlt.document_library_type = ?
+END_QUERY
+    },
+    
+    {
+        name => 'Document Templates',
+        directory => 'DocumentTemplates',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT dt.xml_data.getClobVal()
+FROM decmgr.document_templates dt
+WHERE dt.name = ?
+END_QUERY
+    },
+    
+    {
+        name => 'File Folder Types',
+        directory => 'FileFolderTypes',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT fft.xml_data.getClobVal()
+FROM decmgr.file_folder_types fft
+WHERE fft.file_folder_type = ?
+END_QUERY
+    },
+    
+    {
         name => 'Fox5Modules - JavaScript',
         directory => 'Fox5Modules',
         extension => '\.js',
@@ -128,29 +164,29 @@ END_QUERY
     },
 
     {
-        name => 'xview',
-        directory => 'XviewDefinitions',
+        name => 'FoxModules - Modules',
+        directory => 'FoxModules',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
         statement => <<"END_QUERY"
-SELECT x.xview_metadata.getClobVal()
-FROM xviewmgr.xview_definition_metadata x
-WHERE x.file_name = ? || '.xml'
+SELECT fc.data FROM envmgr.fox_components fc
+WHERE fc.type = 'module'
+AND fc.name = ?
 END_QUERY
     },
-
+    
     {
-        name => 'Xview 2s',
-        directory => 'Xview2Definitions',
+        name => 'Mapsets',
+        directory => 'Mapsets',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
         statement => <<"END_QUERY"
-SELECT x.xview_metadata_formatted
-FROM xviewmgr.xview2_definition_metadata x
-WHERE x.file_name = ? || '.xml'
+SELECT emm.metadata.getClobVal()
+FROM envmgr.env_mapsets_metadata emm
+WHERE emm.domain = ?
 END_QUERY
     },
-
+    
     {
         name => 'NavBar Action Groups',
         directory => 'NavBarActionGroups',
@@ -174,53 +210,102 @@ FROM envmgr.nav_bar_action_categories x
 WHERE x.mnem = ?
 END_QUERY
     },
-
+    
     {
-        name => 'DocLib Types',
-        directory => 'DocLibTypes',
+        name => 'Port Folder Types',
+        directory => 'PortalFolderTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
         statement => <<"END_QUERY"
-SELECT dlt.xml_data.getClobVal()
-FROM doclibmgr.document_library_types dlt
-WHERE dlt.document_library_type = ?
+SELECT pft.xml_data.getClobVal()
+FROM decmgr.portal_folder_types pft
+WHERE pft.portal_folder_type = ?
+END_QUERY
+    },
+    
+    {
+        name => 'Report Definitions',
+        directory => 'ReportDefinitions',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT rd.xml_data.getClobVal()
+FROM reportmgr.report_definitions rd
+WHERE rd.domain = ?
+END_QUERY
+    },
+    
+    {
+        name => 'Resource Types',
+        directory => 'ResourceTypes',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT rt.xml_data.getClobVal()
+FROM decmgr.resource_types rt
+WHERE rt.res_type = ?
+END_QUERY
+    },
+    
+    {
+        name => 'Tally Types',
+        directory => 'TallyTypes',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT tt.xml_data.getClobVal()
+FROM bpmmgr.tally_types tt
+WHERE tt.tally_type = ?
+END_QUERY
+    },
+    
+    {
+        name => 'Work Request Types',
+        directory => 'ApplicationMetadata\\WorkRequestTypes',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT wrt.xml_data.getClobVal()
+FROM iconmgr.work_request_types wrt
+WHERE wrt.mnem = ?
+END_QUERY
+    },
+    
+    {
+        name => 'WUA Preference Categories',
+        directory => 'WUAPreferenceCategories',
+        extension => '\.xml',
+        remove_patterns => [ $whitespace_regex, $xml_regex ],
+        statement => <<"END_QUERY"
+SELECT wpc.xml_data.getClobVal()
+FROM securemgr.wua_preference_categories wpc
+WHERE wpc.category_name = ?
 END_QUERY
     },
 
     {
-        name => 'Document Templates',
-        directory => 'DocumentTemplates',
+        name => 'Xview Definitions',
+        directory => 'XviewDefinitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
         statement => <<"END_QUERY"
-SELECT dt.xml_data.getClobVal()
-FROM decmgr.document_templates dt
-WHERE dt.name = ?
+SELECT x.xview_metadata.getClobVal()
+FROM xviewmgr.xview_definition_metadata x
+WHERE x.file_name = ? || '.xml'
 END_QUERY
     },
 
     {
-        name => 'File Folder Types',
-        directory => 'FileFolderTypes',
+        name => 'Xview 2 Definitions',
+        directory => 'Xview2Definitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
         statement => <<"END_QUERY"
-SELECT fft.xml_data.getClobVal()
-FROM decmgr.file_folder_types fft
-WHERE fft.file_folder_type = ?
+SELECT x.xview_metadata_formatted
+FROM xviewmgr.xview2_definition_metadata x
+WHERE x.file_name = ? || '.xml'
 END_QUERY
     },
 
-    {
-        name => 'Mapsets',
-        directory => 'Mapsets',
-        extension => '\.xml',
-        remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
-SELECT emm.metadata.getClobVal()
-FROM envmgr.env_mapsets_metadata emm
-WHERE emm.domain = ?
-END_QUERY
-    },
     );
 }
