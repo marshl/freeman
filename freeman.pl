@@ -108,10 +108,11 @@ sub get_directory_types {
         directory => 'Fox5Modules',
         extension => '\.js',
         remove_patterns => [ $whitespace_regex, $js_regex ],
-        statement => 
-"SELECT data
+        statement => <<"END_QUERY"
+SELECT data
 FROM envmgr.fox_components_fox5 fc5
-WHERE fc5.name = 'js/' || ?",
+WHERE fc5.name = 'js/' || ?
+END_QUERY
     },
 
     {
@@ -119,10 +120,11 @@ WHERE fc5.name = 'js/' || ?",
         directory => 'Fox5Modules',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT data
+        statement => <<"END_QUERY"
+SELECT data
 FROM envmgr.fox_components_fox5 fc5
-WHERE fc5.name = ?",
+WHERE fc5.name = ?
+END_QUERY
     },
 
     {
@@ -130,10 +132,11 @@ WHERE fc5.name = ?",
         directory => 'XviewDefinitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT x.xview_metadata.getClobVal()
+        statement => <<"END_QUERY"
+SELECT x.xview_metadata.getClobVal()
 FROM xviewmgr.xview_definition_metadata x
-WHERE x.file_name = ? || '.xml'",
+WHERE x.file_name = ? || '.xml'
+END_QUERY
     },
 
     {
@@ -141,10 +144,11 @@ WHERE x.file_name = ? || '.xml'",
         directory => 'Xview2Definitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT x.xview_metadata_formatted
+        statement => <<"END_QUERY"
+SELECT x.xview_metadata_formatted
 FROM xviewmgr.xview2_definition_metadata x
-WHERE x.file_name = ? || '.xml'",
+WHERE x.file_name = ? || '.xml'
+END_QUERY
     },
 
     {
@@ -152,10 +156,11 @@ WHERE x.file_name = ? || '.xml'",
         directory => 'NavBarActionGroups',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT x.xml_data.getClobVal()
+        statement => <<"END_QUERY"
+SELECT x.xml_data.getClobVal()
 FROM envmgr.nav_bar_action_groups x
-WHERE x.mnem = ?",
+WHERE x.mnem = ?
+END_QUERY
     },
 
     {
@@ -163,10 +168,11 @@ WHERE x.mnem = ?",
         directory => 'NavBarActionCategories',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT x.xml_data.getClobVal()
+        statement => <<"END_QUERY"
+SELECT x.xml_data.getClobVal()
 FROM envmgr.nav_bar_action_categories x
-WHERE x.mnem = ?",
+WHERE x.mnem = ?
+END_QUERY
     },
 
     {
@@ -174,10 +180,11 @@ WHERE x.mnem = ?",
         directory => 'DocLibTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT dlt.xml_data.getClobVal()
+        statement => <<"END_QUERY"
+SELECT dlt.xml_data.getClobVal()
 FROM doclibmgr.document_library_types dlt
-WHERE dlt.document_library_type = ?",
+WHERE dlt.document_library_type = ?
+END_QUERY
     },
 
     {
@@ -185,10 +192,11 @@ WHERE dlt.document_library_type = ?",
         directory => 'DocumentTemplates',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT dt.xml_data.getClobVal()
+        statement => <<"END_QUERY"
+SELECT dt.xml_data.getClobVal()
 FROM decmgr.document_templates dt
-WHERE dt.name = ?",
+WHERE dt.name = ?
+END_QUERY
     },
 
     {
@@ -196,10 +204,11 @@ WHERE dt.name = ?",
         directory => 'FileFolderTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT fft.xml_data.getClobVal()
+        statement => <<"END_QUERY"
+SELECT fft.xml_data.getClobVal()
 FROM decmgr.file_folder_types fft
-WHERE fft.file_folder_type = ?",
+WHERE fft.file_folder_type = ?
+END_QUERY
     },
 
     {
@@ -207,10 +216,11 @@ WHERE fft.file_folder_type = ?",
         directory => 'Mapsets',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => 
-"SELECT emm.metadata.getClobVal()
+        statement => <<"END_QUERY"
+SELECT emm.metadata.getClobVal()
 FROM envmgr.env_mapsets_metadata emm
-WHERE emm.domain = ?",
+WHERE emm.domain = ?
+END_QUERY
     },
     );
 }
