@@ -18,78 +18,119 @@ use File::Spec;
 use File::Temp qw(tempfile);
 use Getopt::Long;
 
-my @directory_types = get_directory_types();
-
-if ( @ARGV != 6 ) {
-    die "Usage: freeman.pl code_source_folder host port sid username password\n";
-}
-my ( $code_source_folder, $host, $port, $sid, $username, $password ) = @ARGV;
-
-die "Invalid folder $code_source_folder" if not -d $code_source_folder;
+die "Usage: freeman.pl code_source_dir host port sid username password\n" if @ARGV != 6;
+my ( $code_source_dir, $host, $port, $sid, $username, $password ) = @ARGV;
+die "Invalid folder $code_source_dir" if not -d $code_source_dir;
 
 my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password ) or die "Error connecting to DB: $DBI::errstr";
 # Expand the read length to a safe size
 $dbh->{LongReadLen} = 512 * 1024;
 
-DIRECTORY_TYPE:
-foreach my $directory_type ( @directory_types ) {
-    print "\nComparing $directory_type->{'name'}\n";
+compare_directories($dbh, $code_source_dir);
+compare_patches($dbh, $code_source_dir);
 
-    my $directory_path = File::Spec->catfile( $code_source_folder, $directory_type->{'directory'} );
+sub compare_directories {
 
-    if ( not -d $directory_path ) {
-        print "Directory not found: $directory_path\n";
-        next DIRECTORY_TYPE;
+    my ( $dbh, $code_source_dir ) = @ARG;
+
+    my @directory_types = get_directory_types();
+
+    DIRECTORY_TYPE:
+    foreach my $directory_type ( @directory_types ) {
+        print "\nComparing $directory_type->{'name'}\n";
+
+        my $directory_path = File::Spec->catfile( $code_source_dir, $directory_type->{'directory'} );
+
+        if ( not -d $directory_path ) {
+            print "Directory not found: $directory_path\n";
+            next DIRECTORY_TYPE;
+        }
+
+        my $statement = $dbh->prepare( $directory_type->{'statement'} ) or die $dbh->errstr;
+        my @file_list;
+        find(
+            sub {
+                if ( m/^.+?$directory_type->{'extension'}$/xs ) {
+                    push @file_list, $File::Find::name;
+                }
+            },
+            $directory_path
+        );
+
+        FULLPATH:
+        foreach my $fullpath ( @file_list ) {
+            my $filename = basename($fullpath);
+            my ($without_extension) = fileparse($fullpath, qr/[.][^.]*/x);
+
+            $statement->execute($without_extension) or die "Error executing statement: $statement->errstr()";
+            my $filedata = $statement->fetchrow();
+
+            if ( $statement->rows > 1 ) {
+                print "Too many records found for $filename\n";
+                next FULLPATH;
+            }
+
+            if ( $statement->rows == 0 ) {
+                print "New File: $filename\n";
+                next FULLPATH;
+            }
+
+            my $local_file_content;
+            {
+                open ( my $fh, '<', $fullpath ) or die "Could not open file $fullpath: $OS_ERROR";
+                local $INPUT_RECORD_SEPARATOR = undef;
+                $local_file_content = <$fh>;
+                close $fh;
+            }
+
+            my $patterns = $directory_type->{'remove_patterns'};
+            foreach my $pattern ( @{$patterns} ) {
+                $local_file_content =~ s/$pattern//g;
+                $filedata =~ s/$pattern//g;
+            }
+
+            if ( $local_file_content ne $filedata ) {
+                print "Modified: $filename\n";
+            }
+        }
     }
+}
 
-    my $statement = $dbh->prepare( $directory_type->{'statement'} ) or die $dbh->errstr;
-    #print Dumper($directory_type);
-    my @file_list;
+sub compare_patches {
+    my ( $dbh, $code_source_dir ) = @ARG;
+    
+    print "\nChecking patch runs\n";
+    
+    my $patch_directory = File::Spec->catfile( $code_source_dir, 'DatabasePatches' );
+
+    my @patch_list;
     find(
         sub {
-            if ( m/^.+?$directory_type->{'extension'}$/xs ) {
-                push @file_list, $File::Find::name;
+            if ( m/^.+?\.sql$/ ) {
+                push @patch_list, $File::Find::name;
             }
         },
-        $directory_path
+        $patch_directory
     );
-
-    FULLPATH:
-    foreach my $fullpath ( @file_list ) {
-        my $filename = basename($fullpath);
-        my ($without_extension) = fileparse($fullpath, qr/[.][^.]*/x);
-
-        #print "$without_extension\n";
-
-        $statement->execute($without_extension) or die $statement->errstr();
+    
+    my $statement = $dbh->prepare( <<"QUERY_END"
+SELECT pr.id FROM promotemgr.patch_runs pr
+WHERE pr.patch_label = ?
+AND pr.patch_number = ?
+AND pr.ignore_flag IS NULL
+QUERY_END
+    ) or die $dbh->errstr;
+    
+    foreach my $patch ( @patch_list ) {
+        my $filename = basename($patch);
+        $filename =~ /^(?<patch_type>\D+?)(?<patch_number>\d+?) \(.+?\)\.sql/;
+        
+        $statement->execute( $LAST_PAREN_MATCH{'patch_type'}, $LAST_PAREN_MATCH{'patch_number'} )
+            or die "Error executing statement: $statement->errstr()";
         my $filedata = $statement->fetchrow();
-
-        if ( $statement->rows > 1 ) {
-            print "Too many records found for $filename\n";
-            next FULLPATH;
-        }
-
+        
         if ( $statement->rows == 0 ) {
-            print "New File: $filename\n";
-            next FULLPATH;
-        }
-
-        my $local_file_content;
-        {
-            open ( my $fh, '<', $fullpath ) or die "Could not open file $fullpath: $OS_ERROR";
-            local $INPUT_RECORD_SEPARATOR = undef;
-            $local_file_content = <$fh>;
-            close $fh;
-        }
-
-        my $patterns = $directory_type->{'remove_patterns'};
-        foreach my $pattern ( @{$patterns} ) {
-            $local_file_content =~ s/$pattern//gx;
-            $filedata =~ s/$pattern//gx;
-        }
-
-        if ( $local_file_content ne $filedata ) {
-            print "Modified: $filename\n";
+            print "New Patch: $filename\n";
         }
     }
 }
