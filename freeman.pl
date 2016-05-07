@@ -57,7 +57,7 @@ foreach my $directory_type ( @directory_types ) {
     FULLPATH:
     foreach my $fullpath ( @file_list ) {
         my $filename = basename($fullpath);
-        my ($without_extension) = fileparse($fullpath, qr/[.][^.]*/);
+        my ($without_extension) = fileparse($fullpath, qr/[.][^.]*/x);
 
         #print "$without_extension\n";
 
@@ -84,8 +84,8 @@ foreach my $directory_type ( @directory_types ) {
 
         my $patterns = $directory_type->{'remove_patterns'};
         foreach my $pattern ( @{$patterns} ) {
-            $local_file_content =~ s/$pattern//g;
-            $filedata =~ s/$pattern//g;
+            $local_file_content =~ s/$pattern//gx;
+            $filedata =~ s/$pattern//gx;
         }
 
         if ( $local_file_content ne $filedata ) {
