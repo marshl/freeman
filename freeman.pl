@@ -77,13 +77,7 @@ sub compare_directories {
                 next FULLPATH;
             }
 
-            my $local_file_content;
-            {
-                open ( my $fh, '<', $fullpath ) or die "Could not open file $fullpath: $OS_ERROR";
-                local $INPUT_RECORD_SEPARATOR = undef;
-                $local_file_content = <$fh>;
-                close $fh;
-            }
+            my $local_file_content = read_file_text( $fullpath );
 
             my $patterns = $directory_type->{'remove_patterns'};
             foreach my $pattern ( @{$patterns} ) {
