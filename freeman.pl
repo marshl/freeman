@@ -230,7 +230,7 @@ sub get_directory_types {
 
     my $whitespace_regex = '\s';
     my $js_regex = '\/[*].+?[*]\/';
-    my $xml_regex = '<!--.\*-->';
+    my $xml_regex = '<!--.*-->';
 
     return (
     {
