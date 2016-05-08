@@ -22,7 +22,7 @@ die "Usage: freeman.pl code_source_dir host port sid username password\n" if @AR
 my ( $code_source_dir, $host, $port, $sid, $username, $password ) = @ARGV;
 die "Invalid folder $code_source_dir" if not -d $code_source_dir;
 
-my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password ) or die "Error connecting to DB: $DBI::errstr";
+my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password, { PrintError => 0, PrintWarn => 0 } ) or die "Error connecting to DB: $DBI::errstr";
 # Expand the read length to a safe size
 $dbh->{LongReadLen} = 512 * 1024;
 
