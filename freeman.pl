@@ -28,6 +28,7 @@ $dbh->{LongReadLen} = 512 * 1024;
 
 compare_directories($dbh, $code_source_dir);
 compare_patches($dbh, $code_source_dir);
+compare_database_source($dbh, $code_source_dir);
 
 sub compare_directories {
 
@@ -136,6 +137,94 @@ QUERY_END
 }
 
 $dbh->disconnect();
+sub compare_database_source {
+    my ($dbh, $code_source_dir) = @ARG;
+    
+    print "\nComparing packages:\n";
+    
+    my $source_directory = File::Spec->catfile( $code_source_dir, 'DatabaseSource' );
+
+    if ( not $dbh->do( <<"QUERY_END"
+CREATE USER freemanmgr IDENTIFIED BY "password"
+QUERY_END
+    ) ) {
+        if ( $dbh->err == 1920 ) {
+            print "FREEMANMGR already exists, and will not be recreated.\n";
+        }
+        else {
+            die $dbh->errstr;
+        }
+    }
+    
+    my @file_list;
+    find(
+        sub {
+            if ( m/^.+?\.(pkb|pks)$/ ) {
+                push @file_list, $File::Find::name;
+            }
+        },
+        $source_directory
+    );
+    
+    my %file_extensions = ( '.pks' => 'PACKAGE', '.pkb' => 'PACKAGE_BODY' );
+
+    PACKAGE:
+    for my $fullpath ( @file_list ) {
+        my ($filename, $directory, $extension) = fileparse($fullpath, keys %file_extensions);
+        my $file_content = read_file_text( $fullpath );
+        my $object_type = $file_extensions{$extension};
+        
+        if ( not $file_content =~ /CREATE OR REPLACE.+?(?<schema>[^.\s"]+)"?\."?(?<object>[^.\s"]+)/ ) {
+            print "$filename$extension did not match standard creation syntax.\n";
+        }
+        
+        my $schema_name = uc $LAST_PAREN_MATCH{'schema'};
+        my $object_name = uc $LAST_PAREN_MATCH{'object'};
+        $file_content =~ s/(CREATE OR REPLACE.+?)([^.\s]+)\.([^.\s]+)/${1}FREEMANMGR.$3/;
+
+        if ( not $dbh->do( $file_content ) ) {
+            if ( $dbh->err != 24344 ) { 
+                die $dbh->errstr;
+            }
+        } 
+        
+        my $statement = $dbh->prepare(
+"SELECT " .
+"DBMS_LOB.COMPARE( " .
+"  REGEXP_REPLACE( REGEXP_REPLACE( REGEXP_REPLACE( DBMS_METADATA.GET_DDL( object_type => '$object_type', name => '$object_name', schema => 'FREEMANMGR' ), 'FREEMANMGR', '$schema_name' ), '/', ''), '\\s', '')" .
+", REGEXP_REPLACE( REGEXP_REPLACE( DBMS_METADATA.GET_DDL( object_type => '$object_type', name => '$object_name', schema => '$schema_name' ), '/', ''), '\\s', '' )" .
+") result " .
+"FROM dual"
+        ) or die $dbh->errstr;
+        
+        if ( not $statement->execute() ) {
+            if ( $dbh->err == 31603 ) {
+                print "New package: $filename$extension\n";
+                next PACKAGE;
+            }
+            else {
+                die $dbh->errstr;
+            }
+        }
+        
+        my $compare_result = $statement->fetchrow();
+        if ( $compare_result != 0 ) {
+            print "Modified: $filename$extension\n";
+        }
+    }
+    
+    $dbh->do( "DROP USER freemanmgr CASCADE" )
+        or die $dbh->errstr;
+}
+
+sub read_file_text {
+    my ($filename) = @ARG;
+    open ( my $fh, '<', $filename ) or die "Could not open file $filename: $OS_ERROR";
+    local $INPUT_RECORD_SEPARATOR = undef;
+    my $filedata = <$fh>;
+    close $fh;
+    return $filedata;
+}
 
 sub get_directory_types {
 
