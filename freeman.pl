@@ -110,22 +110,27 @@ sub compare_patches {
     );
     
     my $statement = $dbh->prepare( <<"QUERY_END"
-SELECT pr.id FROM promotemgr.patch_runs pr
+SELECT COUNT(*)
+FROM promotemgr.patch_runs pr
 WHERE pr.patch_label = ?
 AND pr.patch_number = ?
 AND pr.ignore_flag IS NULL
 QUERY_END
     ) or die $dbh->errstr;
     
+    PATCH:
     foreach my $patch ( @patch_list ) {
         my $filename = basename($patch);
-        $filename =~ /^(?<patch_type>\D+?)(?<patch_number>\d+?) \(.+?\)\.sql/;
+        if ( not $filename =~ /^(?<patch_type>\D+?)(?<patch_number>\d+?) \(.+?\)\.sql/ ) {
+            print "$filename is not a valid patch naming format.\n";
+            next PATCH;
+        }
         
         $statement->execute( $LAST_PAREN_MATCH{'patch_type'}, $LAST_PAREN_MATCH{'patch_number'} )
             or die "Error executing statement: $statement->errstr()";
-        my $filedata = $statement->fetchrow();
         
-        if ( $statement->rows == 0 ) {
+        my $count = $statement->fetchrow();
+        if ( $count == 0 ) {
             print "New Patch: $filename\n";
         }
     }
