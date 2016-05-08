@@ -29,6 +29,7 @@ $dbh->{LongReadLen} = 512 * 1024;
 compare_directories($dbh, $code_source_dir);
 compare_patches($dbh, $code_source_dir);
 compare_database_source($dbh, $code_source_dir);
+$dbh->disconnect();
 
 sub compare_directories {
 
@@ -136,7 +137,6 @@ QUERY_END
     }
 }
 
-$dbh->disconnect();
 sub compare_database_source {
     my ($dbh, $code_source_dir) = @ARG;
     
