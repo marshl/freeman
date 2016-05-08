@@ -121,12 +121,12 @@ QUERY_END
     PATCH:
     foreach my $patch ( @patch_list ) {
         my $filename = basename($patch);
-        if ( not $filename =~ /^(?<patch_type>\D+?)(?<patch_number>\d+?) \(.+?\)\.sql/ ) {
+        if ( not $filename =~ /^(\D+?)(\d+?) \(.+?\)\.sql/ ) {
             print "$filename is not a valid patch naming format.\n";
             next PATCH;
         }
         
-        $statement->execute( $LAST_PAREN_MATCH{'patch_type'}, $LAST_PAREN_MATCH{'patch_number'} )
+        $statement->execute( $1, $2 )
             or die "Error executing statement: $statement->errstr()";
         
         my $count = $statement->fetchrow();
@@ -173,12 +173,12 @@ QUERY_END
         my $file_content = read_file_text( $fullpath );
         my $object_type = $file_extensions{$extension};
         
-        if ( not $file_content =~ /CREATE OR REPLACE.+?(?<schema>[^.\s"]+)"?\."?(?<object>[^.\s"]+)/ ) {
+        if ( not $file_content =~ /CREATE OR REPLACE.+?([^.\s"]+)"?\."?([^.\s"]+)/ ) {
             print "$filename$extension did not match standard creation syntax.\n";
         }
         
-        my $schema_name = uc $LAST_PAREN_MATCH{'schema'};
-        my $object_name = uc $LAST_PAREN_MATCH{'object'};
+        my $schema_name = uc $1;
+        my $object_name = uc $2;
         $file_content =~ s/(CREATE OR REPLACE.+?)([^.\s]+)\.([^.\s]+)/${1}FREEMANMGR.$3/;
 
         if ( not $dbh->do( $file_content ) ) {
