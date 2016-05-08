@@ -175,6 +175,7 @@ QUERY_END
         
         if ( not $file_content =~ /CREATE OR REPLACE.+?([^.\s"]+)"?\."?([^.\s"]+)/ ) {
             print "$filename$extension did not match standard creation syntax.\n";
+            next PACKAGE;
         }
         
         my $schema_name = uc $1;
