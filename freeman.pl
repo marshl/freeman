@@ -22,7 +22,9 @@ die "Usage: freeman.pl code_source_dir host port sid username password\n" if @AR
 my ( $code_source_dir, $host, $port, $sid, $username, $password ) = @ARGV;
 die "Invalid folder $code_source_dir" if not -d $code_source_dir;
 
-my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password, { PrintError => 0, PrintWarn => 0 } ) or die "Error connecting to DB: $DBI::errstr";
+my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password, { PrintError => 0, PrintWarn => 0 } )
+    or die "Error connecting to DB: $DBI::errstr";
+
 # Expand the read length to a safe size
 $dbh->{LongReadLen} = 512 * 1024;
 
@@ -165,7 +167,24 @@ QUERY_END
         $source_directory
     );
     
-    my %file_extensions = ( '.pks' => 'PACKAGE', '.pkb' => 'PACKAGE_BODY' );
+    my $statement = $dbh->prepare(<<"QUERY_END"
+SELECT COUNT(*)
+FROM dba_source lhs
+LEFT JOIN all_source rhs
+ON lhs.type = rhs.type
+AND rhs.name = lhs.name
+AND rhs.line = lhs.line
+AND rhs.owner = ?
+WHERE lhs.type = ?
+AND lhs.owner = 'FREEMANMGR'
+AND lhs.name = ?
+AND lhs.text NOT LIKE '/%'
+AND ( rhs.line IS NULL
+    OR REGEXP_REPLACE( lhs.text, '\\s', '') != REGEXP_REPLACE( rhs.text, '\\s', '') )
+QUERY_END
+    ) or die $dbh->errstr;
+    
+    my %file_extensions = ( '.pks' => 'PACKAGE', '.pkb' => 'PACKAGE BODY' );
 
     PACKAGE:
     for my $fullpath ( @file_list ) {
@@ -188,28 +207,12 @@ QUERY_END
             }
         } 
         
-        my $statement = $dbh->prepare(
-"SELECT " .
-"DBMS_LOB.COMPARE( " .
-"  REGEXP_REPLACE( REGEXP_REPLACE( REGEXP_REPLACE( DBMS_METADATA.GET_DDL( object_type => '$object_type', name => '$object_name', schema => 'FREEMANMGR' ), 'FREEMANMGR', '$schema_name' ), '/', ''), '\\s', '')" .
-", REGEXP_REPLACE( REGEXP_REPLACE( DBMS_METADATA.GET_DDL( object_type => '$object_type', name => '$object_name', schema => '$schema_name' ), '/', ''), '\\s', '' )" .
-") result " .
-"FROM dual"
-        ) or die $dbh->errstr;
+        $statement->execute($schema_name, $object_type, $object_name) 
+            or die $dbh->errstr;
         
-        if ( not $statement->execute() ) {
-            if ( $dbh->err == 31603 ) {
-                print "New package: $filename$extension\n";
-                next PACKAGE;
-            }
-            else {
-                die $dbh->errstr;
-            }
-        }
-        
-        my $compare_result = $statement->fetchrow();
-        if ( $compare_result != 0 ) {
-            print "Modified: $filename$extension\n";
+        my ($linecount) = $statement->fetchrow();
+        if ( $linecount != 0 ) {
+            print "Modified: $fullpath\n";
         }
     }
     
