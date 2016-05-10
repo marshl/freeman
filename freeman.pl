@@ -6,11 +6,18 @@
 #
 ####
 
+
+# Find typos in variable names
 use strict;
 use warnings;
 
+# perl database interface module
 use DBI;
+
+# stringify perl data structures (toString essentially)
 use Data::Dumper;
+
+# use nice English names for ugly punctuation variables, such as $/
 use English qw(-no_match_vars);
 use File::Basename;
 use File::Find;
@@ -18,15 +25,23 @@ use File::Spec;
 use File::Temp qw(tempfile);
 use Getopt::Long;
 
+# fail if the argv array has a size less than 6 (wrong args)
 die "Usage: freeman.pl code_source_dir host port sid username password\n" if @ARGV != 6;
+
+# declare a list of local variables (hence my), each one equals the argument passed in
 my ( $code_source_dir, $host, $port, $sid, $username, $password ) = @ARGV;
+
+# fail if the code_source_dir is not a directory
 die "Invalid folder $code_source_dir" if not -d $code_source_dir;
 
+# connect to the database, create a database handle ($dbh) if it succeeds. 
 my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password, { PrintError => 0, PrintWarn => 0 } )
     or die "Error connecting to DB: $DBI::errstr";
 
 # Expand the read length to a safe size
+# This is stored as a hash
 $dbh->{LongReadLen} = 512 * 1024;
+
 
 compare_directories($dbh, $code_source_dir);
 compare_patches($dbh, $code_source_dir);
@@ -35,26 +50,40 @@ $dbh->disconnect();
 
 sub compare_directories {
 
+    # declare database handle and code course directory as passed in above
     my ( $dbh, $code_source_dir ) = @ARG;
 
     my @directory_types = get_directory_types();
 
+
+    # this labels the loop so it can continue if need be (see line 71)
     DIRECTORY_TYPE:
     foreach my $directory_type ( @directory_types ) {
         print "\nComparing $directory_type->{'name'}\n";
 
+        # concatenate a file path
         my $directory_path = File::Spec->catfile( $code_source_dir, $directory_type->{'directory'} );
 
+        # if this is not a directory then error
         if ( not -d $directory_path ) {
             print "Directory not found: $directory_path\n";
+            # continue on with the loop
             next DIRECTORY_TYPE;
         }
 
+
+        # prepare the statement for the directory type defined below (or die with the error from the db handle)
         my $statement = $dbh->prepare( $directory_type->{'statement'} ) or die $dbh->errstr;
+        
+        # create file list array
+        # somehow using sub in here activates perl magic and it knows to run the outside procedure
+        # recursively. What even!? In this case recurse and find files with the correct extension for the 
+        # current directory type
         my @file_list;
         find(
             sub {
                 if ( m/^.+?$directory_type->{'extension'}$/xs ) {
+                    # add file name to file list 
                     push @file_list, $File::Find::name;
                 }
             },
@@ -82,11 +111,14 @@ sub compare_directories {
             my $local_file_content = read_file_text( $fullpath );
 
             my $patterns = $directory_type->{'remove_patterns'};
+
+            # this wacky '=~'' is used to bind a scalar variable to a pattern match 
             foreach my $pattern ( @{$patterns} ) {
                 $local_file_content =~ s/$pattern//g;
                 $filedata =~ s/$pattern//g;
             }
 
+            # ne = not equal to
             if ( $local_file_content ne $filedata ) {
                 print "Modified: $filename\n";
             }
@@ -128,9 +160,11 @@ QUERY_END
             next PATCH;
         }
         
+        # where do these arguments come from? 
         $statement->execute( $1, $2 )
             or die "Error executing statement: $statement->errstr()";
         
+        # if the patch doesn't already exist (i.e.)
         my $count = $statement->fetchrow();
         if ( $count == 0 ) {
             print "New Patch: $filename\n";
