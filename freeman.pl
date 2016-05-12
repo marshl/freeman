@@ -6,79 +6,73 @@
 #
 ####
 
-
-# Find typos in variable names
+# Strict forbids symbolic references, use of undeclared variables and "Poetry optimisation" (uses of bareword identifiers)
 use strict;
+
+# Warnings promotes most hidden warnings to visible, ushc as useless use of variables in void context, or accessing null scalars
 use warnings;
 
-# perl database interface module
+# Perl database interface module
 use DBI;
 
-# stringify perl data structures (toString essentially)
+# Used to dump the entire contents of a variable and all nested objects as a string
 use Data::Dumper;
 
-# use nice English names for ugly punctuation variables, such as $/
+# English replaces ugly punctuation variables, such as $/, with proper names
 use English qw(-no_match_vars);
 use File::Basename;
 use File::Find;
 use File::Spec;
-use File::Temp qw(tempfile);
-use Getopt::Long;
 
-# fail if the argv array has a size less than 6 (wrong args)
+# Verify that the exact number of arguments is given (an array, which all begin with @, in numerical context is the length of the array)
 die "Usage: freeman.pl code_source_dir host port sid username password\n" if @ARGV != 6;
 
-# declare a list of local variables (hence my), each one equals the argument passed in
+# Declare a variable for each item in the argument list
 my ( $code_source_dir, $host, $port, $sid, $username, $password ) = @ARGV;
 
-# fail if the code_source_dir is not a directory
+# Verify that the CodeSource directory exists
 die "Invalid folder $code_source_dir" if not -d $code_source_dir;
 
-# connect to the database, create a database handle ($dbh) if it succeeds. 
-my $dbh = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password, { PrintError => 0, PrintWarn => 0 } )
+# Connect to the database. Don't print warnings or errors, as they will be handled during normal program flow. Also expand the read length to a safe size
+# Hashes in perl are defined using { key => value }
+# Most perl functions return a false value if they fail. If you "or" the result with the die function, then die will be called if the function call fails
+# Die is similar to abort(), but also prints an error message and a stack trace if called in a module
+my $database_handle = DBI->connect( "dbi:Oracle:host=$host;port=$port;sid=$sid;", $username, $password, { PrintError => 0, PrintWarn => 0, LongReadLen => 512 * 1024 } )
     or die "Error connecting to DB: $DBI::errstr";
 
-# Expand the read length to a safe size
-# This is stored as a hash
-$dbh->{LongReadLen} = 512 * 1024;
-
-
-compare_directories($dbh, $code_source_dir);
-compare_patches($dbh, $code_source_dir);
-compare_database_source($dbh, $code_source_dir);
-$dbh->disconnect();
+compare_directories($database_handle, $code_source_dir);
+compare_patches($database_handle, $code_source_dir);
+compare_database_source($database_handle, $code_source_dir);
+$database_handle->disconnect();
 
 sub compare_directories {
 
-    # declare database handle and code course directory as passed in above
-    my ( $dbh, $code_source_dir ) = @ARG;
+    # Parameters are stored in the @ARG array, and can be assigned from in bulk
+    my ( $database_handle, $code_source_dir ) = @ARG;
 
     my @directory_types = get_directory_types();
 
-
-    # this labels the loop so it can continue if need be (see line 71)
+    # Loops can be labelled and then specified when using next (continue), last (break) or redo
+    # a foreach loop iterates over the @array and stores the current value within the $scalar
     DIRECTORY_TYPE:
     foreach my $directory_type ( @directory_types ) {
         print "\nComparing $directory_type->{'name'}\n";
 
-        # concatenate a file path
+        # Create an absolute path to the directory in CodeSource
+        # $directory_type is a reference to a hash, so -> dereferences it, then {'key'} accesses the hash
         my $directory_path = File::Spec->catfile( $code_source_dir, $directory_type->{'directory'} );
 
-        # if this is not a directory then error
+        # Verify that the directory exists
         if ( not -d $directory_path ) {
             print "Directory not found: $directory_path\n";
-            # continue on with the loop
             next DIRECTORY_TYPE;
         }
 
-
-        # prepare the statement for the directory type defined below (or die with the error from the db handle)
-        my $statement = $dbh->prepare( $directory_type->{'statement'} ) or die $dbh->errstr;
+        # Prepare the statement for the directory type defined below (or die with the error from the db handle)
+        my $statement = $database_handle->prepare( $directory_type->{'statement'} )
+            or die $database_handle->errstr;
         
-        # create file list array
-        # somehow using sub in here activates perl magic and it knows to run the outside procedure
-        # recursively. What even!? In this case recurse and find files with the correct extension for the 
-        # current directory type
+        # find() uses an anonyomous sub to find all files that match the extension of the directory type
         my @file_list;
         find(
             sub {
@@ -95,9 +89,11 @@ sub compare_directories {
             my $filename = basename($fullpath);
             my ($without_extension) = fileparse($fullpath, qr/[.][^.]*/x);
 
-            $statement->execute($without_extension) or die "Error executing statement: $statement->errstr()";
+            $statement->execute($without_extension)
+                or die "Error executing statement: $statement->errstr()";
+            
             my $filedata = $statement->fetchrow();
-
+            
             if ( $statement->rows > 1 ) {
                 print "Too many records found for $filename\n";
                 next FULLPATH;
@@ -107,18 +103,19 @@ sub compare_directories {
                 print "New File: $filename\n";
                 next FULLPATH;
             }
-
+            
             my $local_file_content = read_file_text( $fullpath );
-
             my $patterns = $directory_type->{'remove_patterns'};
 
-            # this wacky '=~'' is used to bind a scalar variable to a pattern match 
+            # For each pattern in the directory type pattern list
+            # remove any text that matches that pattern
             foreach my $pattern ( @{$patterns} ) {
                 $local_file_content =~ s/$pattern//g;
                 $filedata =~ s/$pattern//g;
             }
 
-            # ne = not equal to
+            # ne is the string equivalent of != 
+            # in perl == is used for numerical comparison
             if ( $local_file_content ne $filedata ) {
                 print "Modified: $filename\n";
             }
@@ -127,7 +124,7 @@ sub compare_directories {
 }
 
 sub compare_patches {
-    my ( $dbh, $code_source_dir ) = @ARG;
+    my ( $database_handle, $code_source_dir ) = @ARG;
     
     print "\nChecking patch runs\n";
     
@@ -143,24 +140,28 @@ sub compare_patches {
         $patch_directory
     );
     
-    my $statement = $dbh->prepare( <<"QUERY_END"
+    # <<"QUERY_END" is here-doc, a way to break a string over multiple lines (similar to the Oracle q quote)
+    my $statement = $database_handle->prepare( <<"QUERY_END"
 SELECT COUNT(*)
 FROM promotemgr.patch_runs pr
 WHERE pr.patch_label = ?
 AND pr.patch_number = ?
 AND pr.ignore_flag IS NULL
 QUERY_END
-    ) or die $dbh->errstr;
+    ) or die $database_handle->errstr;
     
     PATCH:
     foreach my $patch ( @patch_list ) {
         my $filename = basename($patch);
+        
+        # =~ performs a regex match on the lhs using the regex on the rhs (regexes are defined using slashes /.+?/)
         if ( not $filename =~ /^(\D+?)(\d+?) \(.+?\)\.sql/ ) {
             print "$filename is not a valid patch naming format.\n";
             next PATCH;
         }
         
-        # where do these arguments come from? 
+        # Regex grouping are stored in the globals $1 though $9 
+        # $1 => patch label, $2 => patch description (see regex above)
         $statement->execute( $1, $2 )
             or die "Error executing statement: $statement->errstr()";
         
@@ -173,21 +174,22 @@ QUERY_END
 }
 
 sub compare_database_source {
-    my ($dbh, $code_source_dir) = @ARG;
+    my ($database_handle, $code_source_dir) = @ARG;
     
     print "\nComparing packages:\n";
     
     my $source_directory = File::Spec->catfile( $code_source_dir, 'DatabaseSource' );
 
-    if ( not $dbh->do( <<"QUERY_END"
+    if ( not $database_handle->do( <<"QUERY_END"
 CREATE USER freemanmgr IDENTIFIED BY "password"
 QUERY_END
     ) ) {
-        if ( $dbh->err == 1920 ) {
+        # ORA-01920: user name 'string' conflicts with another user or role name 
+        if ( $database_handle->err == 1920 ) {
             print "FREEMANMGR already exists, and will not be recreated.\n";
         }
         else {
-            die $dbh->errstr;
+            die $database_handle->errstr;
         }
     }
     
@@ -201,7 +203,7 @@ QUERY_END
         $source_directory
     );
     
-    my $statement = $dbh->prepare(<<"QUERY_END"
+    my $statement = $database_handle->prepare(<<"QUERY_END"
 SELECT COUNT(*)
 FROM dba_source lhs
 LEFT JOIN all_source rhs
@@ -212,16 +214,18 @@ AND rhs.owner = ?
 WHERE lhs.type = ?
 AND lhs.owner = 'FREEMANMGR'
 AND lhs.name = ?
-AND lhs.text NOT LIKE '/%'
+AND lhs.text NOT LIKE '/%' -- For some reason the temporary package header can have a / on the last line
 AND ( rhs.line IS NULL
     OR REGEXP_REPLACE( lhs.text, '\\s', '') != REGEXP_REPLACE( rhs.text, '\\s', '') )
 QUERY_END
-    ) or die $dbh->errstr;
+    ) or die $database_handle->errstr;
     
+    # %hash is the way to define a perl hash, one of the three fundamental perl types (basically a dictionary)
     my %file_extensions = ( '.pks' => 'PACKAGE', '.pkb' => 'PACKAGE BODY' );
 
     PACKAGE:
     for my $fullpath ( @file_list ) {
+        # keys returns the keys in a hash as an unsorted array
         my ($filename, $directory, $extension) = fileparse($fullpath, keys %file_extensions);
         my $file_content = read_file_text( $fullpath );
         my $object_type = $file_extensions{$extension};
@@ -233,16 +237,20 @@ QUERY_END
         
         my $schema_name = uc $1;
         my $object_name = uc $2;
+        
+        # An s/1/2/ regex match replaces instances of 1 with 2
         $file_content =~ s/(CREATE OR REPLACE.+?)([^.\s]+)\.([^.\s]+)/${1}FREEMANMGR.$3/;
 
-        if ( not $dbh->do( $file_content ) ) {
-            if ( $dbh->err != 24344 ) { 
-                die $dbh->errstr;
+        if ( not $database_handle->do( $file_content ) ) {
+            
+            # ORA-24344 is expected (Package compiled with compilation errors)
+            if ( $database_handle->err != 24344 ) { 
+                die $database_handle->errstr;
             }
         } 
         
         $statement->execute($schema_name, $object_type, $object_name) 
-            or die $dbh->errstr;
+            or die $database_handle->errstr;
         
         my ($linecount) = $statement->fetchrow();
         if ( $linecount != 0 ) {
@@ -250,16 +258,23 @@ QUERY_END
         }
     }
     
-    $dbh->do( "DROP USER freemanmgr CASCADE" )
-        or die $dbh->errstr;
+    $database_handle->do( "DROP USER freemanmgr CASCADE" )
+        or die $database_handle->errstr;
 }
 
+# Read and return all text of the given file
 sub read_file_text {
     my ($filename) = @ARG;
-    open ( my $fh, '<', $filename ) or die "Could not open file $filename: $OS_ERROR";
+    open ( my $filehandle, '<', $filename ) or die "Could not open file $filename: $OS_ERROR";
+    
+    # Remove the input record separator...
     local $INPUT_RECORD_SEPARATOR = undef;
-    my $filedata = <$fh>;
-    close $fh;
+    
+    # ... so when a single line is read, the entire file is captured
+    # <$filehandle> reads a single line from a handle. 
+    # It is most commonly seen as the condition for a while loop to process the file one line at a time
+    my $filedata = <$filehandle>;
+    close $filehandle;
     return $filedata;
 }
 
@@ -269,17 +284,18 @@ sub get_directory_types {
     my $js_regex = '\/[*].+?[*]\/';
     my $xml_regex = '<!--.*-->';
 
+    # A list of directory types, each being a hash of information
     return (
     {
         name => 'DocLib Types',
         directory => 'DocLibTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT dlt.xml_data.getClobVal()
 FROM doclibmgr.document_library_types dlt
 WHERE dlt.document_library_type = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -287,11 +303,11 @@ END_QUERY
         directory => 'DocumentTemplates',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT dt.xml_data.getClobVal()
 FROM decmgr.document_templates dt
 WHERE dt.name = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -299,11 +315,11 @@ END_QUERY
         directory => 'FileFolderTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT fft.xml_data.getClobVal()
 FROM decmgr.file_folder_types fft
 WHERE fft.file_folder_type = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -311,11 +327,11 @@ END_QUERY
         directory => 'Fox5Modules',
         extension => '\.js',
         remove_patterns => [ $whitespace_regex, $js_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT data
 FROM envmgr.fox_components_fox5 fc5
 WHERE fc5.name = 'js/' || ?
-END_QUERY
+QUERY_END
     },
 
     {
@@ -323,11 +339,11 @@ END_QUERY
         directory => 'Fox5Modules',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT data
 FROM envmgr.fox_components_fox5 fc5
 WHERE fc5.name = ?
-END_QUERY
+QUERY_END
     },
 
     {
@@ -335,11 +351,11 @@ END_QUERY
         directory => 'FoxModules',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT fc.data FROM envmgr.fox_components fc
 WHERE fc.type = 'module'
 AND fc.name = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -347,11 +363,11 @@ END_QUERY
         directory => 'Mapsets',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT emm.metadata.getClobVal()
 FROM envmgr.env_mapsets_metadata emm
 WHERE emm.domain = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -359,11 +375,11 @@ END_QUERY
         directory => 'NavBarActionGroups',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT x.xml_data.getClobVal()
 FROM envmgr.nav_bar_action_groups x
 WHERE x.mnem = ?
-END_QUERY
+QUERY_END
     },
 
     {
@@ -371,11 +387,11 @@ END_QUERY
         directory => 'NavBarActionCategories',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT x.xml_data.getClobVal()
 FROM envmgr.nav_bar_action_categories x
 WHERE x.mnem = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -383,11 +399,11 @@ END_QUERY
         directory => 'PortalFolderTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT pft.xml_data.getClobVal()
 FROM decmgr.portal_folder_types pft
 WHERE pft.portal_folder_type = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -395,11 +411,11 @@ END_QUERY
         directory => 'ReportDefinitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT rd.xml_data.getClobVal()
 FROM reportmgr.report_definitions rd
 WHERE rd.domain = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -407,11 +423,11 @@ END_QUERY
         directory => 'ResourceTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT rt.xml_data.getClobVal()
 FROM decmgr.resource_types rt
 WHERE rt.res_type = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -419,11 +435,11 @@ END_QUERY
         directory => 'TallyTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT tt.xml_data.getClobVal()
 FROM bpmmgr.tally_types tt
 WHERE tt.tally_type = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -431,11 +447,11 @@ END_QUERY
         directory => 'ApplicationMetadata\\WorkRequestTypes',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT wrt.xml_data.getClobVal()
 FROM iconmgr.work_request_types wrt
 WHERE wrt.mnem = ?
-END_QUERY
+QUERY_END
     },
     
     {
@@ -443,11 +459,11 @@ END_QUERY
         directory => 'WUAPreferenceCategories',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT wpc.xml_data.getClobVal()
 FROM securemgr.wua_preference_categories wpc
 WHERE wpc.category_name = ?
-END_QUERY
+QUERY_END
     },
 
     {
@@ -455,11 +471,11 @@ END_QUERY
         directory => 'XviewDefinitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT x.xview_metadata.getClobVal()
 FROM xviewmgr.xview_definition_metadata x
 WHERE x.file_name = ? || '.xml'
-END_QUERY
+QUERY_END
     },
 
     {
@@ -467,11 +483,11 @@ END_QUERY
         directory => 'Xview2Definitions',
         extension => '\.xml',
         remove_patterns => [ $whitespace_regex, $xml_regex ],
-        statement => <<"END_QUERY"
+        statement => <<"QUERY_END"
 SELECT x.xview_metadata_formatted
 FROM xviewmgr.xview2_definition_metadata x
 WHERE x.file_name = ? || '.xml'
-END_QUERY
+QUERY_END
     },
 
     );
