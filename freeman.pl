@@ -155,7 +155,7 @@ QUERY_END
         my $filename = basename($patch);
         
         # =~ performs a regex match on the lhs using the regex on the rhs (regexes are defined using slashes /.+?/)
-        if ( not $filename =~ /^(\D+?)(\d+?) \(.+?\)\.sql/ ) {
+        if ( not $filename =~ /^(\D+?)(\d+?) *\(.+?\)\.sql/ ) {
             print "$filename is not a valid patch naming format.\n";
             next PATCH;
         }
